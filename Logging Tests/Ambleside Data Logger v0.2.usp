@@ -1,0 +1,337 @@
+/*******************************************************************************************
+  SIMPL+ Module Information
+  (Fill in comments below)
+*******************************************************************************************/
+/*
+Dealer Name:Ambleside Logic
+System Name:
+System Number:
+Programmer:Aaron Rosenbaum
+Comments:
+*/
+
+/*******************************************************************************************
+  Compiler Directives
+  (Uncomment and declare compiler directives as needed)
+*******************************************************************************************/
+// #ENABLE_DYNAMIC
+#SYMBOL_NAME "Ambleside Logger"
+#HINT "allog"
+// #DEFINE_CONSTANT
+//#CATEGORY "" 
+#DEFAULT_VOLATILE
+// #PRINT_TO_TRACE
+// #DIGITAL_EXPAND 
+// #ANALOG_SERIAL_EXPAND 
+// #OUTPUT_SHIFT 
+// #HELP_PDF_FILE ""
+// #DEFAULT_NONVOLATILE
+#ENABLE_STACK_CHECKING
+#ENABLE_TRACE
+
+#DEFINE_CONSTANT MAX_DATA_LEN 100
+#DEFINE_CONSTANT MAX_WORDS 10
+#DEFINE_CONSTANT TRUE 1
+#DEFINE_CONSTANT FALSE 0 
+#DEFINE_CONSTANT DEBUG 0
+
+// TCP Status Flags
+#DEFINE_CONSTANT TCP_NOT_CONNECTED 						0
+#DEFINE_CONSTANT TCP_WAITING_FOR_CONNECTION 			1
+#DEFINE_CONSTANT TCP_CONNECTED 							2
+#DEFINE_CONSTANT TCP_CONNECTION_FAILED			 		3
+#DEFINE_CONSTANT TCP_CONNECTION_BROKEN_REMOTELY		    4
+#DEFINE_CONSTANT TCP_CONNECTION_BROKEN_LOCALLY		    5
+#DEFINE_CONSTANT TCP_PERFORMING_DNS_LOOKUP				6
+#DEFINE_CONSTANT TCP_DNS_LOOKUP_FAILED					7
+
+/*
+#HELP_BEGIN
+   (add additional lines of help lines)
+#HELP_END
+*/
+
+/*******************************************************************************************
+  Include Libraries
+  (Uncomment and include additional libraries as needed)
+*******************************************************************************************/
+// #CRESTRON_LIBRARY ""
+// #USER_LIBRARY ""
+
+/*******************************************************************************************
+  DIGITAL, ANALOG and SERIAL INPUTS and OUTPUTS
+  (Uncomment and declare inputs and outputs as needed)
+*******************************************************************************************/
+DIGITAL_INPUT connect,disconnect,post_data;
+
+ANALOG_INPUT data1,data2,data3,data4,data5,data6,data7,data8;
+
+STRING_INPUT status1[100],status2[100],status3[100],status4[100],status5[100],status6[100],status7[100],status8[100];
+// BUFFER_INPUT 
+
+// DIGITAL_OUTPUT 
+ANALOG_OUTPUT Connect_FB;
+STRING_OUTPUT Output$_FB,Recieved_FB;
+
+/*******************************************************************************************
+  SOCKETS
+  (Uncomment and define socket definitions as needed)
+*******************************************************************************************/
+TCP_CLIENT AMBLESIDE[2000];
+// TCP_SERVER
+// UDP_SOCKET
+string hex[255][3];	
+INTEGER bRXOK;
+/*******************************************************************************************
+  Parameters
+  (Uncomment and declare parameters as needed)
+*******************************************************************************************/
+// INTEGER_PARAMETER
+// SIGNED_INTEGER_PARAMETER
+// LONG_INTEGER_PARAMETER
+// SIGNED_LONG_INTEGER_PARAMETER
+STRING_PARAMETER url_pre[25],host_name[50],sensor_id[50];
+
+/*******************************************************************************************
+  Parameter Properties
+  (Uncomment and declare parameter properties as needed)
+*******************************************************************************************/
+/*
+#BEGIN_PARAMETER_PROPERTIES parameter_variable, parameter_variable, ...
+   // propValidUnits = // unitString or unitDecimal|unitHex|unitPercent|unitCharacter|unitTime|unitTicks;
+   // propDefaultUnit = // unitString, unitDecimal, unitHex, unitPercent, unitCharacter, unitTime or unitTicks;
+   // propBounds = lower_bound , upper_bound;
+   // propDefaultValue = ;  // or, propDefaultValue = "";
+   // propList = // { "value" , "label" } , { "value" , "label" } , ... ;
+   // propShortDescription = "status_bar_hint_text";
+   // #BEGIN_PROP_FULL_DESCRIPTION  line_1...  line_2...  line_n  #END_PROP_FULL_DESCRIPTION
+   // #BEGIN_PROP_NOTES line_1...  line_2...  line_n  #END_PROP_NOTES
+#END_PARAMETER_PROPERTIES
+*/
+
+/*******************************************************************************************
+  Functions
+  (Add any additional functions here)
+  Note:  Functions must be physically placed before the location in
+         the code that calls them.
+*******************************************************************************************/
+Function ResetConnection()
+{	clearBuffer(AMBLESIDE.socketRxBuf);
+}
+
+string_function percentEncode(string s)
+{
+	string 	rS[2000];
+	integer x;
+	integer ch;  
+	    
+	for(x = 1 to len(s))											//convert all char into decimal equivalent.
+	{
+		ch = byte(s, x);    
+		
+		if('A' <= ch && ch <= 'Z') 
+		{															// 'A'..'Z'
+        	rS = rS + chr(ch);
+        } 
+        else if('a' <= ch && ch <= 'z') 
+        {															// 'a'..'z'
+	       	rS = rS + chr(ch);
+	    } 
+	    else if('0' <= ch && ch <= '9') 
+	    {															// '0'..'9'
+	       	rS = rS + chr(ch);
+	    } 
+	    else if(ch = 0x20) 
+	    {															// space
+	       	rS = rS + hex[ch];
+	    } 
+	    else if(ch = '-' || ch = '_' || ch = '.' || ch = '!' || ch = '~' || ch = '*' || ch = '(' || ch = ')' || ch = atoi("\x5C"))                                                                                                                                                         
+	   	{                      										// unreserved
+        	rS = rS + chr(ch);
+        } 
+        else if(ch <= 0x007F) 
+        {															//Other ascii "=", "+", "/"
+        	rS = rS + hex[ch];
+   	    } 
+	    else if(ch <= 0x07FF) 
+	    {															// non-ASCII <= 0x7FF
+	       rS = rS + hex[0xC0 | (ch >> 6)];
+	       rS = rS + hex[0x80 | (ch & 0x3F)];
+	    } 
+	    else 
+	    {															// 0x7FF < ch <= 0xFFFF
+	       rS = rS + hex[0xE0 | (ch >> 12)];
+	       rS = rS + hex[0x80 | ((ch >> 6) & 0x3F)];
+	       rS = rS + hex[0x80 | (ch & 0x3F)];
+      	} 	
+	}
+	
+	return(rS);                                      
+} 
+     
+     
+
+
+
+Push Post_Data
+{
+    string datastring[1000], sTemp[255],enc_stat1[100],enc_stat2[100],enc_stat3[100],enc_stat4[100],enc_stat5[100],enc_stat6[100],enc_stat7[100],enc_stat8[100];
+    integer iLen;
+    signed_integer err;
+    
+    datastring = ""; 
+    iLen = 0;
+    if (len(status1)>0)
+	{enc_stat1=percentEncode(status1);}
+	
+    makestring (datastring, "GET %s%s,%d,%d,%d,%d,%d,%d,%d,%d,'%s','%s','%s','%s','%s','%s','%s','%s' HTTP/1.1\nHost:%s\n\n", url_pre, sensor_id, data1,data2,data3,data4,data5,data6,data7,data8,status1,status2,status3,status4,status5,status6,status7,status8, Host_Name);
+     output$_fb=datastring; 
+    if(AMBLESIDE.socketStatus = 2)
+    {
+ 		err = socketSend(AMBLESIDE, datastring);  
+ 		 		if(err < 0)
+		{
+			generateusernotice("Socket Connect Client error # %d", err);
+		}
+    }     
+	           
+}
+
+PUSH Connect
+{
+	signed_integer err;
+	err=socketConnectClient(AMBLESIDE,Host_Name,80,1);
+
+	if(err < 0)
+	{
+		generateusernotice("Socket Connect Client error # %d", err);
+	}
+	
+}
+
+Push Disconnect
+
+{
+
+ SocketDisconnectClient(AMBLESIDE);
+
+}
+
+/*******************************************************************************************
+  Event Handlers
+  (Uncomment and declare additional event handlers as needed)
+*******************************************************************************************/
+
+/*
+RELEASE input
+{
+    // TODO:  Add code here
+}
+*/
+
+/*
+CHANGE input
+{
+    // TODO:  Add code here
+}
+*/
+
+/*
+EVENT
+{
+    // TODO:  Add code here
+}
+*/
+
+/*
+SOCKETCONNECT
+{
+    // TODO:  Add code here
+}
+*/
+
+/*
+SOCKETDISCONNECT
+{
+    // TODO:  Add code here
+}
+*/
+
+/*
+SOCKETRECEIVE
+{
+    // TODO:  Add code here
+}
+*/
+
+
+socketStatus AMBLESIDE
+{ 
+	string wrkString[5000]; 
+	signed_integer	err;
+	connect_fb=AMBLESIDE.socketstatus;
+	switch (AMBLESIDE.socketStatus)
+	{
+		case(TCP_NOT_CONNECTED):
+		{
+		}
+		case(TCP_WAITING_FOR_CONNECTION):
+		{
+		}
+		case(TCP_CONNECTED):
+		{   
+		}
+		case(TCP_CONNECTION_FAILED):
+		{
+			call ResetConnection();
+		}
+		case(TCP_CONNECTION_BROKEN_REMOTELY):
+		{       
+      		call ResetConnection();		
+		}
+		case(TCP_CONNECTION_BROKEN_LOCALLY):
+		{       
+      		call ResetConnection();		
+		}
+		case(TCP_PERFORMING_DNS_LOOKUP):
+		{
+		}
+		case(TCP_DNS_LOOKUP_FAILED):
+		{
+			call ResetConnection();
+		}
+	}
+}
+
+socketReceive AMBLESIDE
+{
+	Recieved_FB = AMBLESIDE.socketRxBuf;					
+			
+}
+
+
+/*******************************************************************************************
+  Main()
+  Uncomment and place one-time startup code here
+  (This code will get called when the system starts up)
+*******************************************************************************************/
+
+Function Main()
+{  
+	integer x;
+	
+	bRXOK = TRUE;
+	
+	for(x = 0 to 255)				//build hex array for percent encoding
+	{
+		if(x < 0x10)
+		{
+			hex[x] = "%0" + itohex(x);
+		}
+		else
+		{
+			hex[x] = "%" + itohex(x);
+		}  
+	}
+}
+

@@ -1,0 +1,26 @@
+K 14
+bugtraq:append
+V 5
+false
+K 13
+bugtraq:label
+V 16
+Defect {PREFIX}-
+K 16
+bugtraq:logregex
+V 38
+{Regular express match of defect ids}
+
+K 15
+bugtraq:message
+V 15
+{PREFIX}-%BUGID
+K 14
+bugtraq:number
+V 5
+false
+K 11
+bugtraq:url
+V 78
+http://arosenbaum:genuflex@alcascade.dnsalias.org:8443/browse/{PREFIX}-%BUGID%
+END
